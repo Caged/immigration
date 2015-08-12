@@ -1,0 +1,109 @@
+#!/usr/bin/env ruby
+
+require 'roo'
+require 'roo-xls'
+require 'csv'
+require 'facets'
+
+out_csv_name = ARGV[0]
+in_xlsx_name = ARGV[1]
+year = File.basename(out_csv_name).split('-').first
+
+out_headers = %w(
+  year
+  statefp
+  countyfp
+  state
+  county
+  final_award_amount
+  total_co_staff
+  total_co_salary
+  total_bed_count
+  total_all_inmate_days
+  total_illegal_inmate_days
+  total_unknown_inmate_days
+  total_inmate_records
+  unique_inmate_records
+  ice_unknown_inmates
+  ice_eligible_inmates
+  ice_ineligible_inmates
+  type
+)
+
+out_csv_file = CSV.open(out_csv_name, 'w', write_headers: true, headers: out_headers)
+
+# Determine if a row is empty or not a county row.  Many of the spreadsheets
+# contain empty or almost empty rows to denote a seperation between each state's
+# counties. Spreadsheets also contain a 'State of $STATE_NAME' entry inline with
+# the other rows.  We want to ignore these rows most of the time.
+def not_county_row(row)
+  row[:state] == 'State' ||
+  (row[:state].nil? && row[:applicant_name].nil?)
+end
+
+def type_for_applicant(row)
+  case row[:applicant_name]
+  when /^state of|department of correction|district of columbia|georgia criminal justice coordinating council|department of public safety and corrections/i then 'state'
+    else 'county'
+  end
+end
+
+
+def symbolize_keys(hash)
+  hash.inject({}) do |memo,(k,v)|
+    k = k.gsub(/[^0-9a-z ]/i, '').gsub(/[\s\-]/, '_').downcase.squeeze('_')
+    memo[k.to_sym] = v
+    memo
+  end
+end
+
+# The official county names and fips codes from the US Census Bureau
+counties = CSV.open('data/csv/county-fips.csv', headers: true)
+
+xls = Roo::Spreadsheet.open(in_xlsx_name)
+sheet = xls.sheet('FY Results')
+
+last_state_name = nil
+sheet.each(header_search: [/state/i, /application\snumber/i]) do |row|
+  row = symbolize_keys(row)
+  next if not_county_row(row)
+
+ # {:state=>nil,
+ # :application_number=>"2010-H3994-WI-AP",
+ # :applicant_name=>"WASHINGTON COUNTY",
+ # :award_number=>"2010-AP-BX-0418",
+ # :final_award_amount=>22427.0, :"total_co_staff**"=>74.74,
+ # :total_co_salary=>4244514.62,
+ # :total_bed_count=>311.0,
+ # :total_all_inmate_days=>81250.0,
+ # :total_inmate_records=>24.0,
+ # :unique_inmate_records=>21.0,
+ # :ice_eligible_inmates=>6.0,
+ # :illegal_inmate_days=>779.0,
+ # :ice_unknown_inmates=>10.0,
+ # :unknown_inmate_days=>844.0,
+ # :ice_ineligible_inmates=>5.0}
+
+  last_state_name = row[:state] unless row[:state].nil?
+
+  out_csv_file << [
+    year,
+    nil,
+    nil,
+    last_state_name,
+    row[:applicant_name],
+    row[:final_award_amount],
+    row[:total_co_staff],
+    row[:total_co_salary],
+    row[:total_bed_count],
+    row[:total_all_inmate_days],
+    row[:total_illegal_inmate_days],
+    row[:total_unknown_inmate_days],
+    row[:total_inmate_records],
+    row[:unique_inmate_records],
+    row[:ice_unknown_inmates],
+    row[:ice_eligible_inmates],
+    row[:ice_ineligible_inmates],
+    type_for_applicant(row)
+  ]
+end
