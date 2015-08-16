@@ -41,6 +41,14 @@ def not_county_row(row)
   (row[:state].nil? && row[:applicant_name].nil?)
 end
 
+# Determine a type for each awardee based on its name.
+#
+# The data contains different administrative levels, but it doesn't distinguish
+# them in any way.  For instance, there are state, county and city-level "awardees"
+# and we want to ensure that we're always comparing equal levels (e.g. State of Alabama
+# vs. State of Colorado).
+#
+# Returns {String} of state, county, or city
 def type_for_applicant(row)
   case row[:applicant_name]
   when /^state of|department of correction|district of columbia|georgia criminal justice coordinating council|department of public safety and corrections/i then 'state'
@@ -48,7 +56,10 @@ def type_for_applicant(row)
   end
 end
 
-
+# Normalize key names, stripping all non-alphanumeric characters and converting
+# them to symbols.
+#
+# Returns a Hash with all keys converted to symbols
 def symbolize_keys(hash)
   hash.inject({}) do |memo,(k,v)|
     k = k.gsub(/[^0-9a-z ]/i, '').gsub(/[\s\-]/, '_').downcase.squeeze('_')
